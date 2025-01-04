@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "openrelik-worker-template"
-version = "2024.11.27"
-description = "Description of the worker"
-authors = ["YOUR NAME <email@example.com>"]
+name = "openrelik-worker-dissect"
+version = "2025.01.27"
+description = "Processes forensic artifacts to generate timelines using Dissect"
+authors = ["Mathieu LE CLEACH <0xFustang@proton.me"]
 readme = "README.md"
 package-mode = false
 
@@ -10,6 +10,7 @@ package-mode = false
 python = "^3.10"
 celery = {extras = ["redis"], version = "^5.4.0"}
 openrelik-worker-common = "^2024.11.27"
+"dissect" = "==3.17.1"
 
 [build-system]
 requires = ["poetry-core"]

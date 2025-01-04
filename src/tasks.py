@@ -13,35 +13,54 @@
 # limitations under the License.
 
 import subprocess
+import logging
+import time 
+
+from dissect.target.target import Target
+from dissect.target.plugin import find_plugin_functions
 
 from openrelik_worker_common.file_utils import create_output_file
 from openrelik_worker_common.task_utils import create_task_result, get_input_files
-
 from .app import celery
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Get Dissect version
+
+dissect_version = subprocess.run(["target-query", "--version"], capture_output=True, text=True)
+
+# Get all Dissect parser names to use for user config form.
+
+collected_plugins = []
+
+funcs, _ = find_plugin_functions(Target(), "*", compatibility=False, show_hidden=True)
+for func in funcs:
+    collected_plugins.append(str(func))
+
 # Task name used to register and route the task to the correct queue.
-TASK_NAME = "your-worker-package-name.tasks.your_task_name"
+TASK_NAME = "openrelik-worker-dissect.tasks.json"
 
 # Task metadata for registration in the core system.
 TASK_METADATA = {
-    "display_name": "<REPLACE_WITH_NAME_OF_THE_WORKER>",
-    "description": "<REPLACE_WITH_DESCRIPTION_OF_THE_WORKER>",
+    "display_name": "Dissect: JSON",
+    "description": "Timelining using Dissect in a JSON format",
     # Configuration that will be rendered as a web for in the UI, and any data entered
     # by the user will be available to the task function when executing (task_config).
     "task_config": [
         {
-            "name": "<REPLACE_WITH_NAME>",
-            "label": "<REPLACE_WITH_LABEL>",
-            "description": "<REPLACE_WITH_DESCRIPTION>",
-            "type": "<REPLACE_WITH_TYPE>",  # Types supported: text, textarea, checkbox
+            "name": "plugins",
+            "label": "Select plugins to use",
+            "description": "Select one or more Dissect parsers to use. If none are selected, all will be used.",
+            "type": "autocomplete",
+            "items": collected_plugins,
             "required": False,
         },
     ],
 }
 
-
 @celery.task(bind=True, name=TASK_NAME, metadata=TASK_METADATA)
-def command(
+def dissect(
     self,
     pipe_result: str = None,
     input_files: list = None,
@@ -49,7 +68,7 @@ def command(
     workflow_id: str = None,
     task_config: dict = None,
 ) -> str:
-    """Run <REPLACE_WITH_COMMAND> on input files.
+    """Run dissect on input files.
 
     Args:
         pipe_result: Base64-encoded result from the previous Celery task, if any.
@@ -63,30 +82,52 @@ def command(
     """
     input_files = get_input_files(pipe_result, input_files or [])
     output_files = []
-    base_command = ["<REPLACE_WITH_COMMAND>"]
-    base_command_string = " ".join(base_command)
+    base_command = ["target-query"]
 
     for input_file in input_files:
         output_file = create_output_file(
             output_path,
-            display_name=input_file.get("display_name"),
-            extension="<REPLACE_WITH_FILE_EXTENSION>",
-            data_type="<[OPTIONAL]_REPLACE_WITH_DATA_TYPE>",
+            extension="json",
+            data_type="dissect:json:json_storage",
         )
+
         command = base_command + [input_file.get("path")]
+
+        plugins = task_config.get("plugins", collected_plugins) if task_config else collected_plugins
+        if not isinstance(plugins, (list, tuple)):
+            plugins = collected_plugins
+        command.extend(["-f", ",".join(plugins)])
+
+        command.extend(["-q", "|", "rdump", "-j", ">", output_file.path])
+
+        final_command = " ".join(command)
 
         # Run the command
         with open(output_file.path, "w") as fh:
-            subprocess.Popen(command, stdout=fh)
+            logger.info("Running Dissect")
+            process = subprocess.Popen(command, stdout=fh)
+            while process.poll() is None:
+                time.sleep(1)
+        
+        logger.info("Dissect finished running")
+
+        if process.returncode != 0:
+            raise RuntimeError(f"Dissect failed with return code {process.returncode}")
 
         output_files.append(output_file.to_dict())
+    
+    # Dissect parsing
 
     if not output_files:
-        raise RuntimeError("<REPLACE_WITH_ERROR_STRING>")
+        raise RuntimeError("Dissect didn't create any output files")
+    else:
+        logger.info(f"Dissect created {len(output_files)} output files")
 
     return create_task_result(
         output_files=output_files,
         workflow_id=workflow_id,
-        command=base_command_string,
-        meta={},
+        command=final_command,
+        meta={
+            "dissect_version": dissect_version.stdout,
+        },
     )
