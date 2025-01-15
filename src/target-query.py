@@ -39,12 +39,12 @@ for func in funcs:
     collected_plugins.append(str(func))
 
 # Task name used to register and route the task to the correct queue.
-TASK_NAME = "openrelik-worker-dissect.tasks.json"
+TASK_NAME = "openrelik-worker-dissect.target-query"
 
 # Task metadata for registration in the core system.
 TASK_METADATA = {
-    "display_name": "Dissect: JSON",
-    "description": "Timelining using Dissect in a JSON format",
+    "display_name": "Dissect: target-query",
+    "description": "Timelining using Dissect",
     # Configuration that will be rendered as a web for in the UI, and any data entered
     # by the user will be available to the task function when executing (task_config).
     "task_config": [
@@ -68,7 +68,7 @@ def dissect(
     workflow_id: str = None,
     task_config: dict = None,
 ) -> str:
-    """Run dissect on input files.
+    """Run target-query from Dissect on input files.
 
     Args:
         pipe_result: Base64-encoded result from the previous Celery task, if any.
@@ -87,8 +87,8 @@ def dissect(
     for input_file in input_files:
         output_file = create_output_file(
             output_path,
-            extension="json",
-            data_type="dissect:json:json_storage",
+            extension="dump",
+            data_type="dissect:target:dump_file",
         )
 
         command = base_command + [input_file.get("path")]
@@ -98,21 +98,21 @@ def dissect(
             plugins = collected_plugins
         command.extend(["-f", ",".join(plugins)])
 
-        command.extend(["-q", "|", "rdump", "-j", ">", output_file.path])
+        command.extend(["-q", ">", output_file.path])
 
         final_command = " ".join(command)
 
         # Run the command
         with open(output_file.path, "w") as fh:
-            logger.info("Running Dissect")
+            logger.info("Running target-query")
             process = subprocess.Popen(command, stdout=fh)
             while process.poll() is None:
                 time.sleep(1)
         
-        logger.info("Dissect finished running")
+        logger.info("target-query finished running")
 
         if process.returncode != 0:
-            raise RuntimeError(f"Dissect failed with return code {process.returncode}")
+            raise RuntimeError(f"target-query failed with return code {process.returncode}")
 
         output_files.append(output_file.to_dict())
     

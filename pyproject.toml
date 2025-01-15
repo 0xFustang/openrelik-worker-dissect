@@ -11,6 +11,7 @@ python = "^3.10"
 celery = {extras = ["redis"], version = "^5.4.0"}
 openrelik-worker-common = "^2024.11.27"
 "dissect" = "==3.17.1"
+"httpx" = "==0.28.1"
 
 [build-system]
 requires = ["poetry-core"]
