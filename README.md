@@ -16,7 +16,7 @@ Add to your docker-compose configuration:
 ```
   openrelik-worker-dissect:
       container_name: openrelik-worker-dissect
-      image: openrelik-worker-dissect:latest
+      image: ghcr.io/0xfustang/openrelik-worker-dissect:latest
       restart: always
       environment:
         - REDIS_URL=redis://openrelik-redis:6379
