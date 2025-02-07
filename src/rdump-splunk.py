@@ -16,6 +16,7 @@ import subprocess
 import logging
 import time 
 
+from typing import Union, List, Dict, Any
 from os import environ
 from openrelik_worker_common.file_utils import create_output_file
 from openrelik_worker_common.task_utils import create_task_result, get_input_files
@@ -31,6 +32,7 @@ dissect_version = subprocess.run(["rdump", "--version"], capture_output=True, te
 # Get all Dissect parser names to use for user config form.
 
 protocol_options = ["tcp", "http", "https"]
+sourcetype_options = ["records", "json"]
 
 # Task name used to register and route the task to the correct queue.
 TASK_NAME = "openrelik-worker-dissect.rdump.splunk"
@@ -46,6 +48,14 @@ TASK_METADATA = {
             "description": "Can be tcp, http or https, defaults to tcp if omitted.",
             "type": "autocomplete",
             "items": protocol_options,
+            "required": False,
+        },
+        {
+            "name": "sourcetype",
+            "label": "Splunk sourcetype",
+            "description": "Can be records or json, defaults to records if omitted.",
+            "type": "autocomplete",
+            "items": sourcetype_options,
             "required": False,
         },
         {
@@ -98,17 +108,30 @@ def rdump2splunk(
 
     # Handle the parameters
 
-    if task_config["protocol"] and len(task_config["protocol"]) > 1:
-        raise RuntimeError(f"Select only one protocol, got {task_config['protocol']}")
+    for key in ["protocol", "sourcetype"]:
+        if isinstance(task_config.get(key), list) and len(task_config[key]) > 1:
+            raise RuntimeError(f"Select only one {key}, got {task_config[key]}")
 
     protocols = task_config.get("protocol", "tcp")
+    sourcetypes = task_config.get("sourcetype", "records")
 
-    if not protocols:
-        protocol = "tcp"
+    # Determine the protocol
+    if isinstance(protocols, list):
+        protocols = [p.lower() for p in protocols]
+        protocol = protocols[0] if protocols else "tcp"
     else:
-        protocols = [p.lower() for p in protocols] if isinstance(protocols, list) else [protocols.lower()]
-        protocol = protocols[0]
-        logger.info(f"protocol is {protocol}")
+        protocol = protocols.lower() if protocols else "tcp"
+
+    logger.info(f"Protocol is {protocol}")
+
+    # Determine the sourcetype
+    if isinstance(sourcetypes, list):
+        sourcetypes = [st.lower() for st in sourcetypes]
+        sourcetype = sourcetypes[0] if sourcetypes else "records"
+    else:
+        sourcetype = sourcetypes.lower() if sourcetypes else "records"
+
+    logger.info(f"Sourcetype is {sourcetype}")
 
     if protocol in ["http", "https"] and not task_config.get("token"):
         raise RuntimeError("Splunk HEC token is required for HTTP(S) protocol")
@@ -118,22 +141,26 @@ def rdump2splunk(
     base_command = ["rdump"]
 
     for input_file in input_files:
-
         command = base_command + [input_file.get("path")]
         rdump_param = []
 
         # Parameters
+        url = f"splunk+{protocol}://{splunk_host}:{splunk_port}"
 
-        command.extend(["-w", f"splunk+{protocol}://" + splunk_host + ":" + splunk_port])
-        
-        # Splunk HEC
+        rdump_param.extend(["?sourcetype=", sourcetype])
+
         if protocol in ["http", "https"]:
-            rdump_param.extend(["?token=", token])
+            rdump_param.extend(["&token=", token])
 
         if protocol == "https" and task_config.get("disable_ssl"):
-            rdump_param.extend(["&ssl_verify=False"])
+            rdump_param.extend(["&ssl_verify=false"])
 
-        final_command = " ".join(command) + "".join(rdump_param)
+        # Join the URL part with parameters
+        full_url = f"{url}{''.join(rdump_param)}"
+        command.extend(["-w", full_url])
+
+        final_command = " ".join(command)
+        logger.info(f"Final command is {final_command}")
 
         # Run the command
         logger.info("Running rdump")
@@ -148,7 +175,6 @@ def rdump2splunk(
 
         if process.returncode != 0:
             raise RuntimeError(f"Rdump failed with return code {process.returncode}")
-
 
     return create_task_result(
         output_files=[],
