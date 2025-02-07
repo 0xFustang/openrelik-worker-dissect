@@ -7,13 +7,6 @@ jobs:
     prep:
       runs-on: ubuntu-latest
 
-      steps:
-        - name: Get Version
-          id: get_version
-          run: |
-              echo "Tag name from GITHUB_REF_NAME: $GITHUB_REF_NAME"
-              echo "Tag name from github.ref_name: ${{  github.ref_name }}"
-
     make-release:
       needs: prep
       runs-on: ubuntu-latest
