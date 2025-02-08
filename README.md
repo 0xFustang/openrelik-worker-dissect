@@ -4,13 +4,13 @@ Processes forensic artifacts to generate a forensic timeline using [Dissect](htt
 
 # Usage
 
-This worker brings the ability to 
+This worker brings the ability to:
 
 - use `target-query` from Dissect and output in a dump file
 - use `rdump` to parse a `target-query` dump file:
-  - create to a JSONL file
-  - send to a Splunk instance
-  
+  - convert it to a JSONL file
+  - send the parsed data to a Splunk instance
+
 # Installation
 
 1. Add to your docker-compose configuration:
