@@ -7,16 +7,18 @@ Processes forensic artifacts to generate a forensic timeline using [Dissect](htt
 This worker brings the ability to 
 
 - use `target-query` from Dissect and output in a dump file
-- use `rdump` to parse a `target-query` dump file and send to Splunk
-
+- use `rdump` to parse a `target-query` dump file:
+  - create to a JSONL file
+  - send to a Splunk instance
+  
 # Installation
 
-Add to your docker-compose configuration:
+1. Add to your docker-compose configuration:
 
 ```
   openrelik-worker-dissect:
       container_name: openrelik-worker-dissect
-      image: ghcr.io/0xfustang/openrelik-worker-dissect:latest
+      image: ghcr.io/0xfustang/openrelik-worker-dissect:${OPENRELIK_WORKER_DISSECT_VERSION}
       restart: always
       environment:
         - REDIS_URL=redis://openrelik-redis:6379
@@ -26,3 +28,7 @@ Add to your docker-compose configuration:
         - ./data:/usr/share/openrelik/data
       command: "celery --app=src.app worker --task-events --concurrency=4 --loglevel=INFO -Q openrelik-worker-dissect"
 ```
+
+2. Add `OPENRELIK_WORKER_DISSECT_VERSION` in your `config.env` file: `OPENRELIK_WORKER_DISSECT_VERSION=0.0.2` or use the latest version.
+
+3. Use `docker-compose up -d` to start the worker.
